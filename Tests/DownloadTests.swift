@@ -1,6 +1,6 @@
 // DownloadTests.swift
 //
-// Copyright (c) 2014 Alamofire (http://alamofire.org)
+// Copyright (c) 2014–2015 Alamofire Software Foundation (http://alamofire.org/)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,49 +21,87 @@
 // THE SOFTWARE.
 
 import Foundation
+import Alamofire
 import XCTest
 
-extension Alamofire {
-    struct DownloadTests {
-        class DownloadResponseTestCase: XCTestCase {
-            func testDownloadRequest() {
-                let numberOfLines = 100
-                let URL = "http://httpbin.org/stream/\(numberOfLines)"
+class AlamofireDownloadResponseTestCase: XCTestCase {
+    let searchPathDirectory: NSSearchPathDirectory = .DocumentDirectory
+    let searchPathDomain: NSSearchPathDomainMask = .UserDomainMask
 
-                let expectation = expectationWithDescription(URL)
+    // MARK: -
 
-                Alamofire.download(.GET, URL, destination: Alamofire.Request.suggestedDownloadDestination(directory: .DocumentDirectory, domain: .UserDomainMask))
-                    .response { request, response, _, error in
-                        expectation.fulfill()
+    func testDownloadRequest() {
+        let numberOfLines = 100
+        let URL = "http://httpbin.org/stream/\(numberOfLines)"
 
-                        XCTAssertNotNil(request, "request should not be nil")
-                        XCTAssertNotNil(response, "response should not be nil")
+        let expectation = expectationWithDescription(URL)
 
-                        XCTAssertNil(error, "error should be nil")
+        let destination = Alamofire.Request.suggestedDownloadDestination(directory: searchPathDirectory, domain: searchPathDomain)
 
-                        let fileManager = NSFileManager.defaultManager()
-                        var fileManagerError: NSError?
-                        let directory = fileManager.URLsForDirectory(.DocumentDirectory, inDomains: .UserDomainMask)[0] as NSURL
-                        let contents = fileManager.contentsOfDirectoryAtURL(directory, includingPropertiesForKeys: nil, options: .SkipsHiddenFiles, error: &fileManagerError) as NSArray
+        Alamofire.download(.GET, URL, destination)
+            .response { request, response, _, error in
+                XCTAssertNotNil(request, "request should not be nil")
+                XCTAssertNotNil(response, "response should not be nil")
 
-                        XCTAssertNil(fileManagerError, "fileManagerError should be nil")
+                XCTAssertNil(error, "error should be nil")
 
-                        let predicate = NSPredicate(format: "lastPathComponent = '\(numberOfLines)'")
-                        let filteredContents = contents.filteredArrayUsingPredicate(predicate)
+                let fileManager = NSFileManager.defaultManager()
+                let directory = fileManager.URLsForDirectory(self.searchPathDirectory, inDomains: self.searchPathDomain)[0] as! NSURL
 
-                        XCTAssertEqual(filteredContents.count, 1, "should have one file in Documents")
+                var fileManagerError: NSError?
+                let contents = fileManager.contentsOfDirectoryAtURL(directory, includingPropertiesForKeys: nil, options: NSDirectoryEnumerationOptions.SkipsHiddenFiles, error: &fileManagerError)!
+                XCTAssertNil(fileManagerError, "fileManagerError should be nil")
 
-                        let file = filteredContents[0] as NSURL
-                        XCTAssertEqual(file.lastPathComponent!, "\(numberOfLines)", "filename should be \(numberOfLines)")
+                #if os(iOS)
+                let suggestedFilename = "\(numberOfLines)"
+                #elseif os(OSX)
+                let suggestedFilename = "\(numberOfLines).json"
+                #endif
 
-                        let data = NSData(contentsOfURL: file)
-                        XCTAssertGreaterThan(data.length, 0, "data length should be non-zero")
+                let predicate = NSPredicate(format: "lastPathComponent = '\(suggestedFilename)'")
+                let filteredContents = (contents as NSArray).filteredArrayUsingPredicate(predicate)
+                XCTAssertEqual(filteredContents.count, 1, "should have one file in Documents")
+
+                let file = filteredContents.first as! NSURL
+                XCTAssertEqual(file.lastPathComponent!, "\(suggestedFilename)", "filename should be \(suggestedFilename)")
+
+                if let data = NSData(contentsOfURL: file) {
+                    XCTAssertGreaterThan(data.length, 0, "data length should be non-zero")
+                } else {
+                    XCTFail("data should exist for contents of URL")
                 }
 
-                waitForExpectationsWithTimeout(10){ error in
-                    XCTAssertNil(error, "\(error)")
-                }
-            }
+                fileManager.removeItemAtURL(file, error: nil)
+
+                expectation.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
+        }
+    }
+
+    func testDownloadRequestWithProgress() {
+        let numberOfLines = 100
+        let URL = "http://httpbin.org/stream/\(numberOfLines)"
+
+        let expectation = expectationWithDescription(URL)
+
+        let destination = Alamofire.Request.suggestedDownloadDestination(directory: searchPathDirectory, domain: searchPathDomain)
+
+        let download = Alamofire.download(.GET, URL, destination)
+        download.progress { (bytesRead, totalBytesRead, totalBytesExpectedToRead) -> Void in
+            XCTAssert(bytesRead > 0, "bytesRead should be > 0")
+            XCTAssert(totalBytesRead > 0, "totalBytesRead should be > 0")
+            XCTAssert(totalBytesExpectedToRead == -1, "totalBytesExpectedToRead should be -1")
+
+            download.cancel()
+
+            expectation.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
         }
     }
 }

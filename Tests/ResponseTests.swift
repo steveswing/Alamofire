@@ -1,6 +1,6 @@
 // ResponseTests.swift
 //
-// Copyright (c) 2014 Alamofire (http://alamofire.org)
+// Copyright (c) 2014–2015 Alamofire Software Foundation (http://alamofire.org/)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,30 +21,107 @@
 // THE SOFTWARE.
 
 import Foundation
+import Alamofire
 import XCTest
 
-extension Alamofire {
-    struct ResponseTests {
-        class JSONResponseTestCase: XCTestCase {
-            func testJSONResponse() {
-                let URL = "http://httpbin.org/get"
-                let expectation = expectationWithDescription("\(URL)")
+class AlamofireJSONResponseTestCase: XCTestCase {
+    func testGETRequestJSONResponse() {
+        let URL = "http://httpbin.org/get"
+        let expectation = expectationWithDescription("\(URL)")
 
-                Alamofire.request(.GET, URL, parameters: ["foo": "bar"])
-                         .responseJSON { (request, response, JSON, error) in
-                            expectation.fulfill()
-                            XCTAssertNotNil(request, "request should not be nil")
-                            XCTAssertNotNil(response, "response should not be nil")
-                            XCTAssertNotNil(JSON, "JSON should not be nil")
-                            XCTAssertNil(error, "error should be nil")
+        Alamofire.request(.GET, URL, parameters: ["foo": "bar"])
+                 .responseJSON { (request, response, JSON, error) in
+                    XCTAssertNotNil(request, "request should not be nil")
+                    XCTAssertNotNil(response, "response should not be nil")
+                    XCTAssertNotNil(JSON, "JSON should not be nil")
+                    XCTAssertNil(error, "error should be nil")
 
-                            XCTAssertEqual(JSON!["args"] as NSObject, ["foo": "bar"], "args should be equal")
-                         }
+                    XCTAssertEqual(JSON!["args"] as! NSObject, ["foo": "bar"], "args should be equal")
 
-                waitForExpectationsWithTimeout(10){ error in
-                    XCTAssertNil(error, "\(error)")
-                }
-            }
+                    expectation.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
+        }
+    }
+
+    func testPOSTRequestJSONResponse() {
+        let URL = "http://httpbin.org/post"
+        let expectation = expectationWithDescription("\(URL)")
+
+        Alamofire.request(.POST, URL, parameters: ["foo": "bar"])
+            .responseJSON { (request, response, JSON, error) in
+                XCTAssertNotNil(request, "request should not be nil")
+                XCTAssertNotNil(response, "response should not be nil")
+                XCTAssertNotNil(JSON, "JSON should not be nil")
+                XCTAssertNil(error, "error should be nil")
+
+                XCTAssertEqual(JSON!["form"] as! NSObject, ["foo": "bar"], "args should be equal")
+
+                expectation.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
+        }
+    }
+}
+
+class AlamofireRedirectResponseTestCase: XCTestCase {
+    func testGETRequestRedirectResponse() {
+        let URL = "http://google.com"
+        let expectation = expectationWithDescription("\(URL)")
+
+        let delegate: Alamofire.Manager.SessionDelegate = Alamofire.Manager.sharedInstance.delegate
+
+        delegate.taskWillPerformHTTPRedirection = { session, task, response, request in
+            // Accept the redirect by returning the updated request.
+            return request
+        }
+
+        Alamofire.request(.GET, URL)
+            .response { (request, response, data, error) in
+                expectation.fulfill()
+                XCTAssertNotNil(request, "request should not be nil")
+                XCTAssertNotNil(response, "response should not be nil")
+                XCTAssertNotNil(data, "data should not be nil")
+                XCTAssertNil(error, "error should be nil")
+
+                XCTAssertEqual(response!.URL!, NSURL(string: "http://www.google.com/")!, "request should have followed a redirect")
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
+        }
+    }
+
+    func testGETRequestDisallowRedirectResponse() {
+        let URL = "http://google.com/"
+        let expectation = expectationWithDescription("\(URL)")
+
+        let delegate: Alamofire.Manager.SessionDelegate = Alamofire.Manager.sharedInstance.delegate
+        delegate.taskWillPerformHTTPRedirection = { session, task, response, request in
+            // Disallow redirects by returning nil.
+            // TODO: NSURLSessionDelegate's URLSession:task:willPerformHTTPRedirection:newRequest:completionHandler:
+            // suggests that returning nil should refuse the redirect, but this causes a deadlock/timeout
+
+            return NSURLRequest(URL: NSURL(string: URL)!)
+        }
+
+        Alamofire.request(.GET, URL)
+            .response { request, response, data, error in
+                expectation.fulfill()
+                XCTAssertNotNil(request, "request should not be nil")
+                XCTAssertNotNil(response, "response should not be nil")
+                XCTAssertNotNil(data, "data should not be nil")
+                XCTAssertNil(error, "error should be nil")
+
+                XCTAssertEqual(response!.URL!, NSURL(string: URL)!, "request should not have followed a redirect")
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
         }
     }
 }

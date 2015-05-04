@@ -1,6 +1,6 @@
 // UploadTests.swift
 //
-// Copyright (c) 2014 Alamofire (http://alamofire.org)
+// Copyright (c) 2014–2015 Alamofire Software Foundation (http://alamofire.org/)
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,34 +21,49 @@
 // THE SOFTWARE.
 
 import Foundation
+import Alamofire
 import XCTest
 
-extension Alamofire {
-    struct UploadTests {
-        class UploadResponseTestCase: XCTestCase {
-            func testDownloadRequest() {
-                let URL = "http://httpbin.org/post"
-                let data = "Lorem ipsum dolor sit amet".dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)
+class UploadResponseTestCase: XCTestCase {
+    func testUploadRequest() {
+        let URL = "http://httpbin.org/post"
+        let data = "Lorem ipsum dolor sit amet".dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)
 
-                let expectation = expectationWithDescription(URL)
+        let expectation = expectationWithDescription(URL)
 
-                Alamofire.upload(.POST, URL, data: data!)
-                    .responseJSON {(request, response, JSON, error) in
-                        expectation.fulfill()
+        Alamofire.upload(.POST, URL, data!)
+                 .response { (request, response, _, error) in
+                    XCTAssertNotNil(request, "request should not be nil")
+                    XCTAssertNotNil(response, "response should not be nil")
+                    XCTAssertNil(error, "error should be nil")
 
-                        XCTAssertNotNil(request, "request should not be nil")
-                        XCTAssertNotNil(response, "response should not be nil")
+                    expectation.fulfill()
+        }
 
-                        XCTAssertNil(error, "error should be nil")
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
+        }
+    }
 
-                        println(JSON)
-                    }
+    func testUploadRequestWithProgress() {
+        let URL = "http://httpbin.org/post"
+        let data = "Lorem ipsum dolor sit amet".dataUsingEncoding(NSUTF8StringEncoding, allowLossyConversion: false)
 
-                waitForExpectationsWithTimeout(10){ error in
-                    XCTAssertNil(error, "\(error)")
-                }
-            }
+        let expectation = expectationWithDescription(URL)
+
+        let upload = Alamofire.upload(.POST, URL, data!)
+        upload.progress { (bytesWritten, totalBytesWritten, totalBytesExpectedToWrite) -> Void in
+            XCTAssert(bytesWritten > 0, "bytesWritten should be > 0")
+            XCTAssert(totalBytesWritten > 0, "totalBytesWritten should be > 0")
+            XCTAssert(totalBytesExpectedToWrite > 0, "totalBytesExpectedToWrite should be > 0")
+
+            upload.cancel()
+
+            expectation.fulfill()
+        }
+
+        waitForExpectationsWithTimeout(10) { (error) in
+            XCTAssertNil(error, "\(error)")
         }
     }
 }
-
